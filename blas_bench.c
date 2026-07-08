@@ -29,8 +29,22 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include <cblas.h>
-#include <lapacke.h>
+
+/*
+ * Header portability: the *function names* (cblas_dgemm, LAPACKE_dgesv) and the
+ * enum/constants (CblasRowMajor, LAPACK_ROW_MAJOR) are standardised, so the CODE
+ * below never changes between providers. But the header FILE that declares them
+ * differs: OpenBLAS/reference ship <cblas.h> + <lapacke.h>, whereas MKL ships
+ * everything under <mkl.h> (mkl_cblas.h / mkl_lapacke.h) and has NO bare cblas.h.
+ * Verify on your cluster with:  ls $MKLROOT/include | grep -E 'cblas|lapacke'
+ * The Spack package passes -DUSE_MKL automatically when the provider is MKL.
+ */
+#ifdef USE_MKL
+#  include <mkl.h>
+#else
+#  include <cblas.h>
+#  include <lapacke.h>
+#endif
 
 static double wall_seconds(void) {
     struct timespec ts;
