@@ -39,6 +39,7 @@
 #include <time.h>
 #include <math.h>
 #include <float.h>
+#include <ctype.h>
 #include <dlfcn.h>
 
 /*
@@ -130,9 +131,23 @@ static int omp_max_threads(void) {
 static void provider_version(char *buf, size_t n) {
     void (*mkl)(char *, int)  = (void (*)(char *, int))dlsym(RTLD_DEFAULT, "mkl_get_version_string");
     char *(*ob)(void)         = (char *(*)(void))dlsym(RTLD_DEFAULT, "openblas_get_config");
-    if (mkl) { mkl(buf, (int)n); return; }
-    if (ob)  { snprintf(buf, n, "%s", ob()); return; }
-    snprintf(buf, n, "unknown");
+
+    /*
+     * Zero first, and hand MKL n-1 rather than n. mkl_get_version_string() pads the
+     * buffer out to the full length it was given with SPACES and does not append a
+     * NUL -- so passing n leaves no terminator and the printf below walks off the end
+     * of the array into whatever follows it on the stack. (That is exactly what the
+     * first run produced: ~500 trailing spaces and three bytes of stack garbage on
+     * every MKL INFO line.) Reserving the last byte, pre-zeroed, terminates it.
+     */
+    memset(buf, 0, n);
+    if (mkl)      mkl(buf, (int)n - 1);
+    else if (ob)  snprintf(buf, n, "%s", ob());
+    else          snprintf(buf, n, "unknown");
+
+    /* Drop MKL's padding; harmless no-op for the others. */
+    for (size_t len = strlen(buf); len > 0 && isspace((unsigned char)buf[len - 1]); --len)
+        buf[len - 1] = '\0';
 }
 
 int main(int argc, char **argv) {
